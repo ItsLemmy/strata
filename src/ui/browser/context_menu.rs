@@ -235,19 +235,10 @@ fn show_model_context_popover(popover: &gtk::Popover, anchor: &gtk::Widget, x: f
     }
     position_model_context_popover(popover, anchor, x, y);
     popover.popup();
-    let (popover, anchor) = (popover.downgrade(), anchor.downgrade());
-    // GTK inserts native section separators in an idle; measure their final height then.
-    glib::idle_add_local_once(move || {
-        if let (Some(popover), Some(anchor)) = (popover.upgrade(), anchor.upgrade())
-            && popover.is_visible()
-        {
-            position_model_context_popover(&popover, &anchor, x, y);
-        }
-    });
 }
 
-/// Room for a menu on the click's monitor; the compositor flips and slides the
-/// popup within it, so the window's own bounds do not constrain the menu.
+// Capped by the monitor, not the window: the popup flips above the click or
+// shrinks to fit the screen.
 fn monitor_menu_height(widget: &impl IsA<gtk::Widget>) -> i32 {
     let monitor = widget
         .native()
