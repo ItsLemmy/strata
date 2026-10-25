@@ -4,7 +4,7 @@ mod density;
 mod syntax;
 mod text_size;
 
-use std::{cell::Cell, collections::HashSet, rc::Rc};
+use std::{cell::Cell, collections::HashSet, path::Path, rc::Rc};
 
 use crate::ui::preferences::{CornerRoundness, PreferenceManager};
 
@@ -236,46 +236,46 @@ fn rewriting_a_symlinked_theme_target_applies_without_a_restart() {
         "ui::theme::tests::rewriting_a_symlinked_theme_target_applies_without_a_restart",
         || {
             let directory = themes_directory();
-            let dotfiles = directory
-                .parent()
-                .expect("config directory")
-                .join("dotfiles");
-            std::fs::create_dir_all(&directory).expect("themes directory");
-            std::fs::create_dir_all(&dotfiles).expect("dotfiles directory");
-            let write_theme = |name: &str, accent: &str| {
+            let config = directory.parent().expect("config directory");
+            let (dotfiles, generated) = (config.join("dotfiles"), config.join("generated"));
+            for path in [&directory, &dotfiles, &generated] {
+                std::fs::create_dir_all(path).expect("theme directories");
+            }
+            let write_theme = |folder: &Path, name: &str, accent: &str| {
                 let mut tokens = azure_tokens();
                 tokens.name = name.to_owned();
                 tokens.accent = accent.to_owned();
                 std::fs::write(
-                    dotfiles.join(format!("{name}.toml")),
+                    folder.join(format!("{name}.toml")),
                     toml::to_string_pretty(&tokens).expect("theme file"),
                 )
                 .expect("written dotfile");
             };
-            let link = |name: &str| {
+            let link = |folder: &Path, name: &str| {
                 std::os::unix::fs::symlink(
-                    dotfiles.join(format!("{name}.toml")),
+                    folder.join(format!("{name}.toml")),
                     directory.join(format!("{name}.toml")),
                 )
                 .expect("dotfiles link");
             };
-            write_theme("linked", "#112233");
-            link("linked");
+            write_theme(&dotfiles, "linked", "#112233");
+            link(&dotfiles, "linked");
 
             let manager = ThemeManager::shared();
             manager.select_theme("linked");
             assert_eq!(manager.active_model_palette().accent, 0x11_22_33);
 
-            write_theme("linked", "#445566");
+            // Dangling until the generator first writes it, in a directory not yet watched.
+            link(&generated, "later");
+            write_theme(&dotfiles, "linked", "#445566");
             wait_for_live_theme(|| manager.active_model_palette().accent == 0x44_55_66);
 
-            write_theme("later", "#778899");
-            link("later");
+            write_theme(&generated, "later", "#778899");
             wait_for_live_theme(|| manager.themes().iter().any(|theme| theme.id == "later"));
             manager.select_theme("later");
             assert_eq!(manager.active_model_palette().accent, 0x77_88_99);
 
-            write_theme("later", "#aabbcc");
+            write_theme(&generated, "later", "#aabbcc");
             wait_for_live_theme(|| manager.active_model_palette().accent == 0xaa_bb_cc);
         },
     );

@@ -973,7 +973,6 @@ fn is_custom_theme_event(file: &gio::File) -> bool {
     })
 }
 
-/// Resolved files behind `.toml` symlinks in the themes directory.
 fn linked_theme_targets(directory: &Path) -> Vec<PathBuf> {
     let Ok(entries) = fs::read_dir(directory) else {
         return Vec::new();
@@ -989,8 +988,20 @@ fn linked_theme_targets(directory: &Path) -> Vec<PathBuf> {
                     .file_type()
                     .is_ok_and(|file_type| file_type.is_symlink())
         })
-        .filter_map(|entry| fs::canonicalize(entry.path()).ok())
+        .filter_map(|entry| resolve_theme_link(&entry.path()))
         .collect()
+}
+
+/// A missing target still resolves, so its directory is watched until the file appears.
+fn resolve_theme_link(link: &Path) -> Option<PathBuf> {
+    fs::canonicalize(link).ok().or_else(|| {
+        let target = link.parent()?.join(fs::read_link(link).ok()?);
+        Some(
+            fs::canonicalize(target.parent()?)
+                .ok()?
+                .join(target.file_name()?),
+        )
+    })
 }
 
 fn is_omarchy_theme_event(file: &gio::File) -> bool {
